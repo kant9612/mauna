@@ -1,0 +1,11 @@
+# Environment files
+.env
+.env.local
+docker/.env
+
+# Data volumes
+data/
+mysql-data/
+
+# Logs
+*.log

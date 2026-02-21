@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.EngineerGradeHistoryRepository">
+
+    <!-- 現在有効な等級の終了日を設定 -->
+    <update id="closeCurrentGrade">
+        UPDATE engineer_grade_history
+        SET effective_to = #{effectiveTo}
+        WHERE engineer_id = #{engineerId}
+          AND effective_to IS NULL
+    </update>
+
+    <!-- 新しい等級履歴を追加 -->
+    <insert id="insert">
+        INSERT INTO engineer_grade_history (engineer_id, grade, sub_grade, effective_from)
+        VALUES (#{engineerId}, #{grade}, #{subGrade}, #{effectiveFrom})
+    </insert>
+
+</mapper>

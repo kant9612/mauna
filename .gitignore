@@ -1,0 +1,42 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# Secrets
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+credentials/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Build
+target/
+build/
+dist/
+node_modules/
+
+# Local config overrides
+application-local.yml
+application-local.properties
+
+# Claude Code local settings
+.claude/settings.local.json

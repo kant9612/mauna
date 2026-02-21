@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.GroupRepository">
+
+    <resultMap id="GroupResultMap" type="com.mauna.domain.Group">
+        <id property="id" column="id"/>
+        <result property="departmentId" column="department_id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="description" column="description"/>
+        <result property="leaderId" column="leader_id"/>
+        <result property="displayOrder" column="display_order"/>
+        <result property="isActive" column="is_active"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="departmentName" column="department_name"/>
+        <result property="leaderName" column="leader_name"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="GroupResultMap">
+        SELECT g.*, d.name as department_name, e.name as leader_name
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        ORDER BY g.display_order, g.id
+    </select>
+
+    <select id="findByDepartmentId" resultMap="GroupResultMap">
+        SELECT g.*, d.name as department_name, e.name as leader_name
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        WHERE g.department_id = #{departmentId}
+        ORDER BY g.display_order, g.id
+    </select>
+
+    <select id="findById" resultMap="GroupResultMap">
+        SELECT g.*, d.name as department_name, e.name as leader_name
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        WHERE g.id = #{id}
+    </select>
+
+    <select id="findByCode" resultMap="GroupResultMap">
+        SELECT g.*, d.name as department_name, e.name as leader_name
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        WHERE g.code = #{code}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO `groups` (department_id, code, name, description, leader_id, display_order, is_active)
+        VALUES (#{departmentId}, #{code}, #{name}, #{description}, #{leaderId}, #{displayOrder}, #{isActive})
+    </insert>
+
+    <update id="update">
+        UPDATE `groups` SET
+            department_id = #{departmentId},
+            code = #{code},
+            name = #{name},
+            description = #{description},
+            leader_id = #{leaderId},
+            display_order = #{displayOrder},
+            is_active = #{isActive}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLeader">
+        UPDATE `groups` SET leader_id = #{leaderId} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM `groups` WHERE id = #{id}
+    </delete>
+
+    <select id="existsById" resultType="boolean">
+        SELECT COUNT(*) > 0 FROM `groups` WHERE id = #{id}
+    </select>
+
+    <select id="countByDepartmentId" resultType="int">
+        SELECT COUNT(*) FROM `groups` WHERE department_id = #{departmentId}
+    </select>
+
+    <select id="findMembersByGroupId" resultType="com.mauna.domain.Engineer">
+        SELECT e.id, e.employee_number as employeeNumber, e.name, e.email, e.phone,
+               e.skill_set as skillSet, e.experience_years as experienceYears,
+               e.experience_months as experienceMonths, e.employment_status as employmentStatus,
+               e.group_id as groupId, e.created_at as createdAt, e.updated_at as updatedAt,
+               g.name as groupName, d.name as departmentName
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        WHERE e.group_id = #{groupId}
+        ORDER BY e.employee_number, e.name
+    </select>
+
+</mapper>

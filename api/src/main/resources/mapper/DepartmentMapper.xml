@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.DepartmentRepository">
+
+    <resultMap id="DepartmentResultMap" type="com.mauna.domain.Department">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <result property="name" column="name"/>
+        <result property="description" column="description"/>
+        <result property="displayOrder" column="display_order"/>
+        <result property="isActive" column="is_active"/>
+        <result property="directorId" column="director_id"/>
+        <result property="directorName" column="director_name"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="DepartmentWithGroupsResultMap" type="com.mauna.domain.Department" extends="DepartmentResultMap">
+        <collection property="groups" ofType="com.mauna.domain.Group" columnPrefix="g_">
+            <id property="id" column="id"/>
+            <result property="departmentId" column="department_id"/>
+            <result property="code" column="code"/>
+            <result property="name" column="name"/>
+            <result property="description" column="description"/>
+            <result property="leaderId" column="leader_id"/>
+            <result property="displayOrder" column="display_order"/>
+            <result property="isActive" column="is_active"/>
+            <result property="createdAt" column="created_at"/>
+            <result property="updatedAt" column="updated_at"/>
+            <result property="leaderName" column="leader_name"/>
+        </collection>
+    </resultMap>
+
+    <select id="findAll" resultMap="DepartmentResultMap">
+        SELECT d.*, e.name as director_name
+        FROM departments d
+        LEFT JOIN engineers e ON d.director_id = e.id
+        ORDER BY d.display_order, d.id
+    </select>
+
+    <select id="findAllWithGroups" resultMap="DepartmentWithGroupsResultMap">
+        SELECT d.*, dir.name as director_name,
+               g.id as g_id, g.department_id as g_department_id, g.code as g_code,
+               g.name as g_name, g.description as g_description, g.leader_id as g_leader_id,
+               g.display_order as g_display_order, g.is_active as g_is_active,
+               g.created_at as g_created_at, g.updated_at as g_updated_at,
+               e.name as g_leader_name
+        FROM departments d
+        LEFT JOIN engineers dir ON d.director_id = dir.id
+        LEFT JOIN `groups` g ON d.id = g.department_id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        ORDER BY d.display_order, d.id, g.display_order, g.id
+    </select>
+
+    <select id="findById" resultMap="DepartmentResultMap">
+        SELECT d.*, e.name as director_name
+        FROM departments d
+        LEFT JOIN engineers e ON d.director_id = e.id
+        WHERE d.id = #{id}
+    </select>
+
+    <select id="findByIdWithGroups" resultMap="DepartmentWithGroupsResultMap">
+        SELECT d.*, dir.name as director_name,
+               g.id as g_id, g.department_id as g_department_id, g.code as g_code,
+               g.name as g_name, g.description as g_description, g.leader_id as g_leader_id,
+               g.display_order as g_display_order, g.is_active as g_is_active,
+               g.created_at as g_created_at, g.updated_at as g_updated_at,
+               e.name as g_leader_name
+        FROM departments d
+        LEFT JOIN engineers dir ON d.director_id = dir.id
+        LEFT JOIN `groups` g ON d.id = g.department_id
+        LEFT JOIN engineers e ON g.leader_id = e.id
+        WHERE d.id = #{id}
+        ORDER BY g.display_order, g.id
+    </select>
+
+    <select id="findByCode" resultMap="DepartmentResultMap">
+        SELECT d.*, e.name as director_name
+        FROM departments d
+        LEFT JOIN engineers e ON d.director_id = e.id
+        WHERE d.code = #{code}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO departments (code, name, description, display_order, is_active, director_id)
+        VALUES (#{code}, #{name}, #{description}, #{displayOrder}, #{isActive}, #{directorId})
+    </insert>
+
+    <update id="update">
+        UPDATE departments SET
+            code = #{code},
+            name = #{name},
+            description = #{description},
+            display_order = #{displayOrder},
+            is_active = #{isActive},
+            director_id = #{directorId}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM departments WHERE id = #{id}
+    </delete>
+
+    <select id="existsById" resultType="boolean">
+        SELECT COUNT(*) > 0 FROM departments WHERE id = #{id}
+    </select>
+
+</mapper>

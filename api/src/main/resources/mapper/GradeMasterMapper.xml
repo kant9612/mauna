@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.GradeMasterRepository">
+
+    <resultMap id="GradeMasterResultMap" type="com.mauna.domain.GradeMaster">
+        <id property="id" column="id"/>
+        <result property="grade" column="grade"/>
+        <result property="subGrade" column="sub_grade"/>
+        <result property="name" column="name"/>
+        <result property="costRate" column="cost_rate"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="GradeMasterResultMap">
+        SELECT * FROM grade_masters ORDER BY grade DESC,
+            CASE sub_grade
+                WHEN 'ENTRY' THEN 1
+                WHEN 'MIDDLE' THEN 2
+                WHEN 'HIGH' THEN 3
+            END
+    </select>
+
+    <select id="findById" resultMap="GradeMasterResultMap">
+        SELECT * FROM grade_masters WHERE id = #{id}
+    </select>
+
+    <select id="findByGradeAndSubGrade" resultMap="GradeMasterResultMap">
+        SELECT * FROM grade_masters WHERE grade = #{grade} AND sub_grade = #{subGrade}
+    </select>
+
+</mapper>

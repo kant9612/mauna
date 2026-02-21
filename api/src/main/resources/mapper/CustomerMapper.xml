@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.CustomerRepository">
+
+    <resultMap id="CustomerResultMap" type="com.mauna.domain.Customer">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="code" column="code"/>
+        <result property="address" column="address"/>
+        <result property="phone" column="phone"/>
+        <result property="email" column="email"/>
+        <result property="contactPerson" column="contact_person"/>
+        <result property="notes" column="notes"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="CustomerResultMap">
+        SELECT * FROM customers ORDER BY created_at DESC
+    </select>
+
+    <select id="findById" resultMap="CustomerResultMap">
+        SELECT * FROM customers WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO customers (name, code, address, phone, email, contact_person, notes)
+        VALUES (#{name}, #{code}, #{address}, #{phone}, #{email}, #{contactPerson}, #{notes})
+    </insert>
+
+    <update id="update">
+        UPDATE customers SET
+            name = #{name},
+            code = #{code},
+            address = #{address},
+            phone = #{phone},
+            email = #{email},
+            contact_person = #{contactPerson},
+            notes = #{notes}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM customers WHERE id = #{id}
+    </delete>
+
+    <select id="findMaxCode" resultType="String">
+        SELECT MAX(code) FROM customers WHERE code LIKE 'CUS%'
+    </select>
+
+</mapper>

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.EngineerRepository">
+
+    <resultMap id="EngineerResultMap" type="com.mauna.domain.Engineer">
+        <id property="id" column="id"/>
+        <result property="employeeNumber" column="employee_number"/>
+        <result property="name" column="name"/>
+        <result property="email" column="email"/>
+        <result property="phone" column="phone"/>
+        <result property="skillSet" column="skill_set"/>
+        <result property="experienceYears" column="experience_years"/>
+        <result property="experienceMonths" column="experience_months"/>
+        <result property="employmentStatus" column="employment_status"/>
+        <result property="groupId" column="group_id"/>
+        <result property="grade" column="grade"/>
+        <result property="subGrade" column="sub_grade"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="groupName" column="group_name"/>
+        <result property="departmentName" column="department_name"/>
+        <result property="gradeName" column="grade_name"/>
+        <result property="costRate" column="cost_rate"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="EngineerResultMap">
+        SELECT e.*, g.name as group_name, d.name as department_name,
+               gm.name as grade_name, gm.cost_rate
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN grade_masters gm ON e.grade = gm.grade AND e.sub_grade = gm.sub_grade
+        ORDER BY e.created_at DESC
+    </select>
+
+    <select id="findById" resultMap="EngineerResultMap">
+        SELECT e.*, g.name as group_name, d.name as department_name,
+               gm.name as grade_name, gm.cost_rate
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN grade_masters gm ON e.grade = gm.grade AND e.sub_grade = gm.sub_grade
+        WHERE e.id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO engineers (employee_number, name, email, phone, skill_set, experience_years, experience_months, employment_status, group_id, grade, sub_grade)
+        VALUES (#{employeeNumber}, #{name}, #{email}, #{phone}, #{skillSet}, #{experienceYears}, #{experienceMonths}, #{employmentStatus}, #{groupId}, #{grade}, #{subGrade})
+    </insert>
+
+    <update id="update">
+        UPDATE engineers SET
+            employee_number = #{employeeNumber},
+            name = #{name},
+            email = #{email},
+            phone = #{phone},
+            skill_set = #{skillSet},
+            experience_years = #{experienceYears},
+            experience_months = #{experienceMonths},
+            employment_status = #{employmentStatus},
+            group_id = #{groupId},
+            grade = #{grade},
+            sub_grade = #{subGrade}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM engineers WHERE id = #{id}
+    </delete>
+
+</mapper>

@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: mauna-api
+
+  jackson:
+    default-property-inclusion: always
+
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mauna?useSSL=false&serverTimezone=Asia/Tokyo&characterEncoding=UTF-8&allowPublicKeyRetrieval=true}
+    username: ${DB_USERNAME:mauna_user}
+    password: ${DB_PASSWORD:mauna_pass}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    sql-migration-prefix: V
+    sql-migration-separator: __
+    sql-migration-suffixes: .sql
+
+mybatis:
+  mapper-locations: classpath:mapper/**/*.xml
+  type-aliases-package: com.mauna.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    default-fetch-size: 100
+    default-statement-timeout: 30
+
+jwt:
+  secret: ${JWT_SECRET:your-secret-key-change-this-in-production-minimum-256-bits}
+  expiration: ${JWT_EXPIRATION:86400000}
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+logging:
+  level:
+    com.mauna: ${LOG_LEVEL:DEBUG}
+    org.springframework.security: ${SECURITY_LOG_LEVEL:DEBUG}

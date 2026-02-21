@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.AssignmentRepository">
+
+    <resultMap id="AssignmentResultMap" type="com.mauna.domain.Assignment">
+        <id property="id" column="id"/>
+        <result property="projectId" column="project_id"/>
+        <result property="engineerId" column="engineer_id"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="role" column="role"/>
+        <result property="billingRate" column="billing_rate"/>
+        <result property="costRate" column="cost_rate"/>
+        <result property="workingHoursPerMonth" column="working_hours_per_month"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="AssignmentScheduleResultMap" type="com.mauna.dto.AssignmentScheduleResponse">
+        <result property="assignmentId" column="assignment_id"/>
+        <result property="engineerId" column="engineer_id"/>
+        <result property="engineerName" column="engineer_name"/>
+        <result property="groupName" column="group_name"/>
+        <result property="departmentName" column="department_name"/>
+        <result property="projectId" column="project_id"/>
+        <result property="projectName" column="project_name"/>
+        <result property="customerName" column="customer_name"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="role" column="role"/>
+        <result property="status" column="status"/>
+        <result property="billingRate" column="billing_rate"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="AssignmentResultMap">
+        SELECT * FROM assignments ORDER BY id
+    </select>
+
+    <select id="findById" resultMap="AssignmentResultMap">
+        SELECT * FROM assignments WHERE id = #{id}
+    </select>
+
+    <!-- 入場予定一覧（start_dateが指定期間内のアサイン） -->
+    <select id="findUpcomingEntries" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE a.start_date >= #{from}
+          AND a.start_date &lt;= #{to}
+          AND a.status IN ('PLANNED', 'ACTIVE')
+        ORDER BY a.start_date, d.display_order, g.display_order, e.name
+    </select>
+
+    <!-- 退場予定一覧（end_dateが指定期間内のアサイン） -->
+    <select id="findUpcomingExits" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE a.end_date >= #{from}
+          AND a.end_date &lt;= #{to}
+          AND a.status IN ('PLANNED', 'ACTIVE')
+        ORDER BY a.end_date, d.display_order, g.display_order, e.name
+    </select>
+
+    <!-- 入退場スケジュール（カレンダー表示用：期間内に入場または退場があるアサイン） -->
+    <select id="findSchedule" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE (
+            (a.start_date >= #{from} AND a.start_date &lt;= #{to})
+            OR (a.end_date >= #{from} AND a.end_date &lt;= #{to})
+        )
+        AND a.status IN ('PLANNED', 'ACTIVE')
+        ORDER BY a.start_date, a.end_date, e.name
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO assignments (project_id, engineer_id, start_date, end_date, role, billing_rate, cost_rate, working_hours_per_month, status)
+        VALUES (#{projectId}, #{engineerId}, #{startDate}, #{endDate}, #{role}, #{billingRate}, #{costRate}, #{workingHoursPerMonth}, #{status})
+    </insert>
+
+    <update id="update">
+        UPDATE assignments SET
+            project_id = #{projectId},
+            engineer_id = #{engineerId},
+            start_date = #{startDate},
+            end_date = #{endDate},
+            role = #{role},
+            billing_rate = #{billingRate},
+            cost_rate = #{costRate},
+            working_hours_per_month = #{workingHoursPerMonth},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM assignments WHERE id = #{id}
+    </delete>
+
+    <!-- 案件別アサイン取得 -->
+    <select id="findByProjectId" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status,
+            a.billing_rate
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE a.project_id = #{projectId}
+        ORDER BY a.start_date, e.name
+    </select>
+
+    <!-- エンジニア別アサイン履歴取得 -->
+    <select id="findByEngineerId" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status,
+            a.billing_rate
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE a.engineer_id = #{engineerId}
+        ORDER BY a.start_date DESC
+    </select>
+
+    <!-- エンジニアIDでACTIVEなアサインの原価を更新 -->
+    <update id="updateCostRateByEngineerId">
+        UPDATE assignments
+        SET cost_rate = #{costRate}
+        WHERE engineer_id = #{engineerId}
+          AND status IN ('PLANNED', 'ACTIVE')
+    </update>
+
+    <!-- エンジニアIDでACTIVEなアサイン一覧を取得 -->
+    <select id="findActiveByEngineerId" resultMap="AssignmentResultMap">
+        SELECT * FROM assignments
+        WHERE engineer_id = #{engineerId}
+          AND status IN ('PLANNED', 'ACTIVE')
+    </select>
+
+    <!-- 待機メンバー一覧（指定日時点で案件にアサインされていないACTIVEエンジニア） -->
+    <select id="findStandbyEngineers" resultType="com.mauna.dto.EngineerResponse">
+        SELECT
+            e.id,
+            e.employee_number as employeeNumber,
+            e.name,
+            e.email,
+            e.phone,
+            e.skill_set as skillSet,
+            e.experience_years as experienceYears,
+            e.employment_status as employmentStatus,
+            e.group_id as groupId,
+            g.name as groupName,
+            d.name as departmentName
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        WHERE e.employment_status = 'ACTIVE'
+        AND e.id NOT IN (
+            SELECT DISTINCT engineer_id
+            FROM assignments
+            WHERE status IN ('PLANNED', 'ACTIVE')
+            AND start_date &lt;= #{date}
+            AND end_date >= #{date}
+        )
+        ORDER BY d.display_order, g.display_order, e.name
+    </select>
+
+    <!-- グループメンバーのアサイン一覧（指定期間内に重複するアサイン） -->
+    <select id="findByGroupId" resultMap="AssignmentScheduleResultMap">
+        SELECT
+            a.id as assignment_id,
+            e.id as engineer_id,
+            e.name as engineer_name,
+            g.name as group_name,
+            d.name as department_name,
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            a.start_date,
+            a.end_date,
+            a.role,
+            a.status,
+            a.billing_rate
+        FROM assignments a
+        INNER JOIN engineers e ON a.engineer_id = e.id
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN departments d ON g.department_id = d.id
+        INNER JOIN projects p ON a.project_id = p.id
+        LEFT JOIN customers c ON p.customer_id = c.id
+        WHERE e.group_id = #{groupId}
+          AND a.status IN ('PLANNED', 'ACTIVE')
+          AND a.start_date &lt;= #{to}
+          AND (a.end_date IS NULL OR a.end_date >= #{from})
+        ORDER BY p.name, a.start_date, e.name
+    </select>
+
+</mapper>

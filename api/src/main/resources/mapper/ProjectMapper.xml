@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.ProjectRepository">
+
+    <resultMap id="ProjectResultMap" type="com.mauna.domain.Project">
+        <id property="id" column="id"/>
+        <result property="customerId" column="customer_id"/>
+        <result property="projectCode" column="project_code"/>
+        <result property="name" column="name"/>
+        <result property="description" column="description"/>
+        <result property="startDate" column="start_date"/>
+        <result property="endDate" column="end_date"/>
+        <result property="status" column="status"/>
+        <result property="billingType" column="billing_type"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="requiredHeadcount" column="required_headcount"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+        <result property="totalBillingRate" column="total_billing_rate"/>
+    </resultMap>
+
+    <resultMap id="ResourceShortageAlertResultMap" type="com.mauna.dto.ResourceShortageAlert">
+        <result property="projectId" column="project_id"/>
+        <result property="projectName" column="project_name"/>
+        <result property="customerName" column="customer_name"/>
+        <result property="projectStatus" column="project_status"/>
+        <result property="requiredHeadcount" column="required_headcount"/>
+        <result property="assignedCount" column="assigned_count"/>
+        <result property="shortage" column="shortage"/>
+        <result property="projectStartDate" column="project_start_date"/>
+        <result property="projectEndDate" column="project_end_date"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="ProjectResultMap">
+        SELECT p.*,
+            (SELECT COALESCE(SUM(a.billing_rate), 0)
+             FROM assignments a
+             WHERE a.project_id = p.id
+               AND a.status IN ('ACTIVE', 'PLANNED')) as total_billing_rate
+        FROM projects p
+        ORDER BY p.created_at DESC
+    </select>
+
+    <select id="findById" resultMap="ProjectResultMap">
+        SELECT p.*,
+            (SELECT COALESCE(SUM(a.billing_rate), 0)
+             FROM assignments a
+             WHERE a.project_id = p.id
+               AND a.status IN ('ACTIVE', 'PLANNED')) as total_billing_rate
+        FROM projects p
+        WHERE p.id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO projects (customer_id, project_code, name, description, start_date, end_date, status, billing_type, unit_price, required_headcount)
+        VALUES (#{customerId}, #{projectCode}, #{name}, #{description}, #{startDate}, #{endDate}, #{status}, #{billingType}, #{unitPrice}, #{requiredHeadcount})
+    </insert>
+
+    <update id="update">
+        UPDATE projects SET
+            customer_id = #{customerId},
+            project_code = #{projectCode},
+            name = #{name},
+            description = #{description},
+            start_date = #{startDate},
+            end_date = #{endDate},
+            status = #{status},
+            billing_type = #{billingType},
+            unit_price = #{unitPrice},
+            required_headcount = #{requiredHeadcount}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM projects WHERE id = #{id}
+    </delete>
+
+    <select id="findMaxProjectCode" resultType="String">
+        SELECT MAX(project_code) FROM projects WHERE project_code LIKE 'PRJ%'
+    </select>
+
+    <!-- リソース不足アラート -->
+    <select id="findResourceShortages" resultMap="ResourceShortageAlertResultMap">
+        SELECT
+            p.id as project_id,
+            p.name as project_name,
+            c.name as customer_name,
+            p.status as project_status,
+            COALESCE(p.required_headcount, 1) as required_headcount,
+            COUNT(DISTINCT a.engineer_id) as assigned_count,
+            COALESCE(p.required_headcount, 1) - COUNT(DISTINCT a.engineer_id) as shortage,
+            p.start_date as project_start_date,
+            p.end_date as project_end_date
+        FROM projects p
+        LEFT JOIN customers c ON p.customer_id = c.id
+        LEFT JOIN assignments a ON p.id = a.project_id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND (a.end_date IS NULL OR a.end_date >= CURDATE())
+        WHERE p.status = 'ACTIVE'
+        GROUP BY p.id, p.name, c.name, p.status, p.required_headcount, p.start_date, p.end_date
+        HAVING shortage > 0 OR (COALESCE(p.required_headcount, 1) > 0 AND assigned_count = 0)
+        ORDER BY shortage DESC, p.start_date
+    </select>
+
+</mapper>

@@ -1,0 +1,503 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.mauna.repository.RevenueRepository">
+
+    <resultMap id="RevenueResultMap" type="com.mauna.domain.Revenue">
+        <id property="id" column="id"/>
+        <result property="yearMonth" column="year_month"/>
+        <result property="assignmentId" column="assignment_id"/>
+        <result property="revenue" column="revenue"/>
+        <result property="cost" column="cost"/>
+        <result property="profit" column="profit"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <resultMap id="RevenueSummaryResultMap" type="com.mauna.dto.RevenueSummaryResponse">
+        <result property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="parentName" column="parent_name"/>
+        <result property="totalRevenue" column="total_revenue"/>
+        <result property="totalCost" column="total_cost"/>
+        <result property="totalProfit" column="total_profit"/>
+        <result property="profitRate" column="profit_rate"/>
+    </resultMap>
+
+    <resultMap id="MonthlyRevenueResultMap" type="com.mauna.dto.MonthlyRevenueResponse">
+        <result property="yearMonth" column="year_month"/>
+        <result property="totalRevenue" column="total_revenue"/>
+        <result property="totalCost" column="total_cost"/>
+        <result property="totalProfit" column="total_profit"/>
+    </resultMap>
+
+    <select id="findAll" resultMap="RevenueResultMap">
+        SELECT * FROM revenues ORDER BY year_month DESC, id
+    </select>
+
+    <select id="findByYearMonth" resultMap="RevenueResultMap">
+        SELECT * FROM revenues WHERE year_month = #{yearMonth} ORDER BY id
+    </select>
+
+    <select id="findById" resultMap="RevenueResultMap">
+        SELECT * FROM revenues WHERE id = #{id}
+    </select>
+
+    <!-- 部別集計（単月） -->
+    <select id="summarizeByDepartment" resultMap="RevenueSummaryResultMap">
+        SELECT
+            d.id,
+            d.name,
+            NULL as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM departments d
+        LEFT JOIN `groups` g ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(#{yearMonth}, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        WHERE d.is_active = true
+        GROUP BY d.id, d.name
+        ORDER BY d.display_order, d.id
+    </select>
+
+    <!-- 部別集計（期間） -->
+    <select id="summarizeByDepartmentRange" resultMap="RevenueSummaryResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            d.id,
+            d.name,
+            NULL as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM departments d
+        CROSS JOIN month_series ms
+        LEFT JOIN `groups` g ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(ms.ym, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        WHERE d.is_active = true
+        GROUP BY d.id, d.name
+        ORDER BY d.display_order, d.id
+    </select>
+
+    <!-- グループ別集計（単月） -->
+    <select id="summarizeByGroup" resultMap="RevenueSummaryResultMap">
+        SELECT
+            g.id,
+            g.name,
+            d.name as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(#{yearMonth}, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        WHERE g.is_active = true
+        GROUP BY g.id, g.name, d.name
+        ORDER BY d.display_order, g.display_order, g.id
+    </select>
+
+    <!-- グループ別集計（期間） -->
+    <select id="summarizeByGroupRange" resultMap="RevenueSummaryResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            g.id,
+            g.name,
+            d.name as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM `groups` g
+        CROSS JOIN month_series ms
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(ms.ym, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        WHERE g.is_active = true
+        GROUP BY g.id, g.name, d.name
+        ORDER BY d.display_order, g.display_order, g.id
+    </select>
+
+    <!-- エンジニア別集計（単月） -->
+    <select id="summarizeByEngineer" resultMap="RevenueSummaryResultMap">
+        SELECT
+            e.id,
+            e.name,
+            g.name as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(#{yearMonth}, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        GROUP BY e.id, e.name, g.name
+        ORDER BY g.name, e.name
+    </select>
+
+    <!-- エンジニア別集計（期間） -->
+    <select id="summarizeByEngineerRange" resultMap="RevenueSummaryResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            e.id,
+            e.name,
+            g.name as parent_name,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit,
+            CASE
+                WHEN COALESCE(SUM(a.billing_rate), 0) = 0 THEN 0
+                ELSE ROUND((1 - (SUM(gm.cost_rate * 1.35) / SUM(a.billing_rate))) * 100, 2)
+            END as profit_rate
+        FROM engineers e
+        CROSS JOIN month_series ms
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(ms.ym, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        GROUP BY e.id, e.name, g.name
+        ORDER BY g.name, e.name
+    </select>
+
+    <!-- 月次推移 -->
+    <select id="getMonthlyTrend" resultMap="MonthlyRevenueResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            ms.ym as year_month,
+            COALESCE(SUM(a.billing_rate), 0) as total_revenue,
+            COALESCE(SUM(gm.cost_rate), 0) as total_cost,
+            COALESCE(SUM(a.billing_rate - gm.cost_rate * 1.35), 0) as total_profit
+        FROM month_series ms
+        LEFT JOIN engineers e ON 1=1
+        LEFT JOIN engineer_grade_history egh ON egh.engineer_id = e.id
+            AND egh.effective_from &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (egh.effective_to IS NULL OR egh.effective_to >= CONCAT(ms.ym, '-01'))
+        LEFT JOIN grade_masters gm ON gm.grade = egh.grade AND gm.sub_grade = egh.sub_grade
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        GROUP BY ms.ym
+        ORDER BY ms.ym
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO revenues (year_month, assignment_id, revenue, cost, profit)
+        VALUES (#{yearMonth}, #{assignmentId}, #{revenue}, #{cost}, #{profit})
+    </insert>
+
+    <update id="update">
+        UPDATE revenues SET
+            year_month = #{yearMonth},
+            assignment_id = #{assignmentId},
+            revenue = #{revenue},
+            cost = #{cost},
+            profit = #{profit}
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM revenues WHERE id = #{id}
+    </delete>
+
+    <!-- 売上予測用 ResultMap -->
+    <resultMap id="RevenueForecastResultMap" type="com.mauna.dto.RevenueForecastResponse">
+        <result property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="parentName" column="parent_name"/>
+        <result property="confirmedRevenue" column="confirmed_revenue"/>
+        <result property="estimatedRevenue" column="estimated_revenue"/>
+        <result property="totalRevenue" column="total_revenue"/>
+        <result property="confirmedCost" column="confirmed_cost"/>
+        <result property="estimatedCost" column="estimated_cost"/>
+        <result property="totalCost" column="total_cost"/>
+        <result property="confirmedProfit" column="confirmed_profit"/>
+        <result property="estimatedProfit" column="estimated_profit"/>
+        <result property="totalProfit" column="total_profit"/>
+    </resultMap>
+
+    <!-- 部別売上予測 -->
+    <select id="forecastByDepartment" resultMap="RevenueForecastResultMap">
+        SELECT
+            d.id,
+            d.name,
+            NULL as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM departments d
+        LEFT JOIN `groups` g ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        WHERE d.is_active = true
+        GROUP BY d.id, d.name
+        ORDER BY d.display_order, d.id
+    </select>
+
+    <!-- グループ別売上予測 -->
+    <select id="forecastByGroup" resultMap="RevenueForecastResultMap">
+        SELECT
+            g.id,
+            g.name,
+            d.name as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        WHERE g.is_active = true
+        GROUP BY g.id, g.name, d.name
+        ORDER BY d.display_order, g.display_order, g.id
+    </select>
+
+    <!-- エンジニア別売上予測 -->
+    <select id="forecastByEngineer" resultMap="RevenueForecastResultMap">
+        SELECT
+            e.id,
+            e.name,
+            g.name as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM engineers e
+        LEFT JOIN `groups` g ON e.group_id = g.id
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(#{yearMonth}, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(#{yearMonth}, '-01'))
+        GROUP BY e.id, e.name, g.name
+        ORDER BY g.name, e.name
+    </select>
+
+    <!-- 粗利推移用 ResultMap -->
+    <resultMap id="GrossProfitTrendResultMap" type="com.mauna.dto.GrossProfitTrendResponse">
+        <result property="yearMonth" column="year_month"/>
+        <result property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="parentName" column="parent_name"/>
+        <result property="confirmedRevenue" column="confirmed_revenue"/>
+        <result property="estimatedRevenue" column="estimated_revenue"/>
+        <result property="totalRevenue" column="total_revenue"/>
+        <result property="confirmedCost" column="confirmed_cost"/>
+        <result property="estimatedCost" column="estimated_cost"/>
+        <result property="totalCost" column="total_cost"/>
+        <result property="confirmedProfit" column="confirmed_profit"/>
+        <result property="estimatedProfit" column="estimated_profit"/>
+        <result property="totalProfit" column="total_profit"/>
+    </resultMap>
+
+    <!-- 粗利推移（全社） -->
+    <select id="getGrossProfitTrendTotal" resultMap="GrossProfitTrendResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            ms.ym as `year_month`,
+            NULL as id,
+            '全社' as name,
+            NULL as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM month_series ms
+        LEFT JOIN assignments a ON a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        GROUP BY ms.ym
+        ORDER BY ms.ym
+    </select>
+
+    <!-- 粗利推移（部別） -->
+    <select id="getGrossProfitTrendByDepartment" resultMap="GrossProfitTrendResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            ms.ym as `year_month`,
+            d.id,
+            d.name,
+            NULL as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM month_series ms
+        CROSS JOIN departments d
+        LEFT JOIN `groups` g ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        WHERE d.is_active = true
+        GROUP BY ms.ym, d.id, d.name
+        ORDER BY ms.ym, d.display_order, d.id
+    </select>
+
+    <!-- 粗利推移（グループ別） -->
+    <select id="getGrossProfitTrendByGroup" resultMap="GrossProfitTrendResultMap">
+        WITH RECURSIVE month_series AS (
+            SELECT #{from} as ym
+            UNION ALL
+            SELECT DATE_FORMAT(DATE_ADD(CONCAT(ym, '-01'), INTERVAL 1 MONTH), '%Y-%m')
+            FROM month_series
+            WHERE ym &lt; #{to}
+        )
+        SELECT
+            ms.ym as `year_month`,
+            g.id,
+            g.name,
+            d.name as parent_name,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.billing_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_revenue,
+            COALESCE(SUM(a.billing_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN a.cost_rate * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_cost,
+            COALESCE(SUM(a.cost_rate * COALESCE(a.working_hours_per_month, 160)), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN a.status = 'ACTIVE' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as confirmed_profit,
+            COALESCE(SUM(CASE WHEN a.status = 'PLANNED' THEN (a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160) ELSE 0 END), 0) as estimated_profit,
+            COALESCE(SUM((a.billing_rate - a.cost_rate) * COALESCE(a.working_hours_per_month, 160)), 0) as total_profit
+        FROM month_series ms
+        CROSS JOIN `groups` g
+        LEFT JOIN departments d ON g.department_id = d.id
+        LEFT JOIN engineers e ON e.group_id = g.id
+        LEFT JOIN assignments a ON a.engineer_id = e.id
+            AND a.status IN ('ACTIVE', 'PLANNED')
+            AND a.start_date &lt;= LAST_DAY(CONCAT(ms.ym, '-01'))
+            AND (a.end_date IS NULL OR a.end_date >= CONCAT(ms.ym, '-01'))
+        WHERE g.is_active = true
+        GROUP BY ms.ym, g.id, g.name, d.name
+        ORDER BY ms.ym, d.display_order, g.display_order, g.id
+    </select>
+
+</mapper>
